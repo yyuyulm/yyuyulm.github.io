@@ -38,12 +38,39 @@ const showAchievement = (message) => {
   toast.className = "achievement-toast panel";
   toast.innerHTML = `<div class="achievement-toast-title">${title}</div><div class="achievement-toast-subtitle">${subtitle}</div>`;
   achievementToasts.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.classList.add("is-settling");
+  });
 
   window.setTimeout(() => {
+    const beforeRects = new Map(
+      Array.from(achievementToasts.children)
+        .filter((node) => node !== toast)
+        .map((node) => [node, node.getBoundingClientRect()])
+    );
+
     toast.addEventListener(
       "animationend",
       () => {
         toast.remove();
+        requestAnimationFrame(() => {
+          Array.from(achievementToasts.children).forEach((node) => {
+            const first = beforeRects.get(node);
+            if (!first) return;
+
+            const last = node.getBoundingClientRect();
+            const dx = first.left - last.left;
+            const dy = first.top - last.top;
+
+            if (!dx && !dy) return;
+
+            node.style.transition = "none";
+            node.style.transform = `translate(${dx}px, ${dy}px)`;
+            node.getBoundingClientRect();
+            node.style.transition = "transform 420ms cubic-bezier(0.4, 0, 0.2, 1)";
+            node.style.transform = "translate(0, 0)";
+          });
+        });
       },
       { once: true }
     );
