@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portfolio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="stage" aria-label="Cursor tracking frame demo">
+      <div class="detection-box" id="detectionBox" aria-hidden="true">
+        <span class="detection-label">visitor</span>
+        <span class="corner corner-top-left"></span>
+        <span class="corner corner-top-right"></span>
+        <span class="corner corner-bottom-left"></span>
+        <span class="corner corner-bottom-right"></span>
+      </div>
+    </main>
+    <aside class="debug-panel" aria-label="Detection debug">
+      <div class="debug-title">debug</div>
+      <div class="debug-row"><span>base</span><span id="debugBase">0</span></div>
+      <div class="debug-list" id="debugBaseDetails">baseline</div>
+      <div class="debug-row"><span>motion</span><span id="debugMotion">0</span></div>
+      <div class="debug-row"><span>typing</span><span id="debugTyping">0</span></div>
+      <div class="debug-row"><span>scroll</span><span id="debugScroll">0</span></div>
+      <div class="debug-row"><span>click</span><span id="debugClick">0</span></div>
+      <div class="debug-row debug-total"><span>final</span><span id="debugFinal">0</span></div>
+    </aside>
+    <script src="script.js"></script>
+  </body>
+</html>
