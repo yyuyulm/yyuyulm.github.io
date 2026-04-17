@@ -16,7 +16,7 @@
         <span class="corner corner-bottom-right"></span>
       </div>
     </main>
-    <aside class="debug-panel" aria-label="Detection debug">
+    <aside class="panel debug-panel" aria-label="Detection debug">
       <div class="debug-title">debug</div>
       <div class="debug-row"><span>base</span><span id="debugBase">0</span></div>
       <div class="debug-list" id="debugBaseDetails">baseline</div>
@@ -24,8 +24,18 @@
       <div class="debug-row"><span>typing</span><span id="debugTyping">0</span></div>
       <div class="debug-row"><span>scroll</span><span id="debugScroll">0</span></div>
       <div class="debug-row"><span>click</span><span id="debugClick">0</span></div>
+      <div class="debug-divider"></div>
+      <div class="debug-control">
+        <button id="debugOverrideToggle" type="button">override off</button>
+        <label class="debug-slider" for="debugOverrideRange">
+          <span>confidence</span>
+          <input id="debugOverrideRange" type="range" min="1" max="99" value="50" />
+          <span id="debugOverrideValue">50%</span>
+        </label>
+      </div>
       <div class="debug-row debug-total"><span>final</span><span id="debugFinal">0</span></div>
     </aside>
+    <div class="achievement-toasts" aria-live="polite" aria-atomic="true"></div>
     <script src="script.js"></script>
   </body>
 </html>

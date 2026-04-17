@@ -7,12 +7,16 @@ const debugTyping = document.getElementById("debugTyping");
 const debugScroll = document.getElementById("debugScroll");
 const debugClick = document.getElementById("debugClick");
 const debugFinal = document.getElementById("debugFinal");
+const debugOverrideToggle = document.getElementById("debugOverrideToggle");
+const debugOverrideRange = document.getElementById("debugOverrideRange");
+const debugOverrideValue = document.getElementById("debugOverrideValue");
+const achievementToasts = document.querySelector(".achievement-toasts");
 const BOX_WIDTH = 120;
 const BOX_HEIGHT = 150;
-const MOTION_WINDOW_MS = 1000;
+const MOTION_WINDOW_MS = 5000;
 const MOTION_SAMPLE_LIMIT = 18;
 const TYPE_SAMPLE_LIMIT = 20;
-const SCROLL_WINDOW_MS = 2000;
+const SCROLL_WINDOW_MS = 4000;
 const SCROLL_SAMPLE_LIMIT = 15;
 const CLICK_SAMPLE_LIMIT = 20;
 
@@ -25,6 +29,44 @@ const standardDeviation = (values) => {
 };
 
 const formatSigned = (value) => `${value > 0 ? "+" : ""}${value}`;
+
+const showAchievement = (message) => {
+  if (!achievementToasts) return;
+
+  const [title, subtitle] = message;
+  const toast = document.createElement("div");
+  toast.className = "achievement-toast panel";
+  toast.innerHTML = `<div class="achievement-toast-title">${title}</div><div class="achievement-toast-subtitle">${subtitle}</div>`;
+  achievementToasts.appendChild(toast);
+
+  window.setTimeout(() => {
+    toast.addEventListener(
+      "animationend",
+      () => {
+        toast.remove();
+      },
+      { once: true }
+    );
+    toast.classList.add("is-exiting");
+  }, 3400);
+};
+
+const setDebugOverrideState = (enabled) => {
+  state.debugOverride.enabled = enabled;
+  debugOverrideToggle.textContent = enabled ? "override on" : "override off";
+  debugOverrideToggle.classList.toggle("is-active", enabled);
+  state.labelDirty = true;
+  updateLabel();
+};
+
+const setDebugOverrideValue = (value) => {
+  state.debugOverride.value = value;
+  debugOverrideValue.textContent = `${value}%`;
+  state.labelDirty = true;
+  if (state.debugOverride.enabled) {
+    updateLabel();
+  }
+};
 
 const getBaseBreakdown = () => {
   const ua = navigator.userAgent;
@@ -101,6 +143,16 @@ const state = {
     click: true,
   },
   labelDirty: true,
+  achievements: {
+    robot: false,
+    robot75: false,
+    robot90: false,
+    robot99: false,
+  },
+  debugOverride: {
+    enabled: false,
+    value: 50,
+  },
 };
 
 const getBaseConfidence = () => {
@@ -336,7 +388,8 @@ const updateLabel = () => {
   }
 
   const totalAdjustment = state.scores.motion + state.scores.typing + state.scores.scroll + state.scores.click;
-  const confidence = clamp(baseConfidence + totalAdjustment, 1, baseConfidence);
+  const calculatedConfidence = clamp(baseConfidence + totalAdjustment, 1, baseConfidence);
+  const confidence = state.debugOverride.enabled ? clamp(state.debugOverride.value, 1, 99) : calculatedConfidence;
 
   const isRobot = confidence < 50;
 
@@ -351,7 +404,30 @@ const updateLabel = () => {
   debugTyping.textContent = formatSigned(state.scores.typing);
   debugScroll.textContent = formatSigned(state.scores.scroll);
   debugClick.textContent = formatSigned(state.scores.click);
-  debugFinal.textContent = `${confidence}% human`;
+  debugFinal.textContent = state.debugOverride.enabled ? `${confidence}% override` : `${confidence}% human`;
+
+  if (isRobot) {
+    if (!state.achievements.robot) {
+      state.achievements.robot = true;
+      showAchievement(["Did you just...failed the Turing Test?", "Reaching 50% confidence of being a robot."]);
+    }
+
+    if (!state.achievements.robot75 && confidence <= 25) {
+      state.achievements.robot75 = true;
+      showAchievement(["Haraway would be proud", "Reaching 75% confidence of being a robot."]);
+    }
+    
+    if (!state.achievements.robot90 && confidence <= 10) {
+      state.achievements.robot90 = true;
+      showAchievement(["The last of us", "Reaching 90% confidence of being a robot."]);
+    }
+
+    if (!state.achievements.robot99 && confidence <= 1) {
+      state.achievements.robot99 = true;
+      showAchievement(["24K Silicon", "Reaching 99% confidence of being a robot."]);
+    }
+  }
+
   state.labelDirty = false;
 };
 
@@ -452,8 +528,17 @@ window.addEventListener("keydown", recordKeydown, { passive: true });
 window.addEventListener("keyup", recordKeyup, { passive: true });
 window.addEventListener("wheel", recordScroll, { passive: true });
 window.addEventListener("click", recordClick, { passive: true });
+debugOverrideToggle.addEventListener("click", () => {
+  setDebugOverrideState(!state.debugOverride.enabled);
+});
+
+debugOverrideRange.addEventListener("input", (event) => {
+  setDebugOverrideValue(Number(event.target.value));
+});
 document.documentElement.addEventListener("mouseleave", hideBox);
 window.addEventListener("blur", hideBox);
 
+setDebugOverrideValue(Number(debugOverrideRange.value));
+setDebugOverrideState(false);
 updateLabel();
 animate();
