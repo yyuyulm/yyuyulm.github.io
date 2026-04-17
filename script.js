@@ -11,11 +11,9 @@ const BOX_WIDTH = 120;
 const BOX_HEIGHT = 150;
 const MOTION_WINDOW_MS = 1000;
 const MOTION_SAMPLE_LIMIT = 18;
-const TYPE_WINDOW_MS = 2500;
-const TYPE_SAMPLE_LIMIT = 40;
+const TYPE_SAMPLE_LIMIT = 20;
 const SCROLL_WINDOW_MS = 2000;
-const SCROLL_SAMPLE_LIMIT = 30;
-const CLICK_WINDOW_MS = 2000;
+const SCROLL_SAMPLE_LIMIT = 15;
 const CLICK_SAMPLE_LIMIT = 20;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -173,9 +171,8 @@ const getMouseAdjustment = () => {
 };
 
 const getTypingAdjustment = () => {
-  const now = performance.now();
-  const keydowns = state.keydowns.filter((entry) => now - entry.t <= TYPE_WINDOW_MS);
-  const holds = state.keyHolds.filter((entry) => now - entry.t <= TYPE_WINDOW_MS);
+  const keydowns = state.keydowns.slice(-TYPE_SAMPLE_LIMIT);
+  const holds = state.keyHolds.slice(-TYPE_SAMPLE_LIMIT);
 
   if (keydowns.length < 3) return 0;
 
@@ -187,24 +184,48 @@ const getTypingAdjustment = () => {
   const holdDurations = holds.map((entry) => entry.duration);
   const intervalMean = average(intervals);
   const holdMean = average(holdDurations);
-  const intervalVariation = intervalMean > 0 ? standardDeviation(intervals) / intervalMean : 0;
   const holdVariation = holdMean > 0 ? standardDeviation(holdDurations) / holdMean : 0;
   const pauses = intervals.filter((interval) => interval > 500).length;
   const backspaces = keydowns.filter((entry) => entry.key === "Backspace").length;
-  const organicIntervals = clamp((intervalVariation - 0.12) / 0.3, 0, 1);
-  const organicHolds = clamp((holdVariation - 0.08) / 0.22, 0, 1);
+  const organicHolds = clamp((holdVariation - 0.08) / 0.2, 0, 1);
+
+  const binSize = 25;
+  const maxBinIndex = 20;
+  const bins = new Map();
+
+  for (const interval of intervals) {
+    const binIndex = Math.min(Math.floor(interval / binSize), maxBinIndex);
+    bins.set(binIndex, (bins.get(binIndex) ?? 0) + 1);
+  }
+
+  const binCounts = Array.from(bins.values()).sort((a, b) => b - a);
+  const dominantShare = binCounts[0] / intervals.length;
+  const topTwoShare = ((binCounts[0] ?? 0) + (binCounts[1] ?? 0)) / intervals.length;
+  const occupiedBins = bins.size;
+  const spreadSpan = Math.max(...bins.keys()) - Math.min(...bins.keys()) + 1;
+  const histogramConcentration = clamp((dominantShare - 0.28) / 0.32, 0, 1);
+  const pairedConcentration = clamp((topTwoShare - 0.5) / 0.3, 0, 1);
+  const histogramSpread = clamp((occupiedBins - 2) / 5, 0, 1);
+  const spanSpread = clamp((spreadSpan - 2) / 6, 0, 1);
 
   let adjustment = 0;
-  adjustment += Math.round(organicIntervals * 12);
-  adjustment += Math.round(organicHolds * 6);
+  adjustment += Math.round(histogramSpread * 16);
+  adjustment += Math.round(spanSpread * 6);
+  adjustment += Math.round(organicHolds * 8);
   adjustment += Math.min(pauses * 3, 9);
 
   if (backspaces > 0) adjustment += Math.min(backspaces * 3, 9);
-  if (intervals.every((interval) => interval < 90)) adjustment -= 12;
-  if (intervalVariation < 0.08 && intervals.length >= 4) adjustment -= 10;
-  if (intervalVariation > 0.2 && holdVariation > 0.1 && keydowns.length >= 5) adjustment += 4;
+  adjustment -= Math.round(histogramConcentration * 30);
+  adjustment -= Math.round(pairedConcentration * 14);
+  adjustment -= Math.round(clamp((0.12 - holdVariation) / 0.12, 0, 1) * 12);
 
-  return clamp(adjustment, -30, 18);
+  if (intervals.length >= 5 && dominantShare > 0.5) adjustment -= 12;
+  if (intervals.length >= 6 && dominantShare > 0.65) adjustment -= 10;
+  if (dominantShare < 0.4 && occupiedBins >= 4) adjustment += 4;
+  if (topTwoShare < 0.65 && spreadSpan >= 5) adjustment += 4;
+  if (holdVariation > 0.1 && keydowns.length >= 5) adjustment += 4;
+
+  return clamp(adjustment, -45, 28);
 };
 
 const getScrollAdjustment = () => {
@@ -245,10 +266,9 @@ const getScrollAdjustment = () => {
 };
 
 const getClickAdjustment = () => {
-  const now = performance.now();
-  const clicks = state.clicks.filter((entry) => now - entry.t <= CLICK_WINDOW_MS);
+  const clicks = state.clicks.slice(-CLICK_SAMPLE_LIMIT);
 
-  if (!clicks.length) return 0;
+  if (clicks.length < 3) return 0;
 
   const intervals = [];
   for (let index = 1; index < clicks.length; index += 1) {
@@ -257,27 +277,35 @@ const getClickAdjustment = () => {
 
   const delays = clicks.map((entry) => entry.hoverDelay);
   const distances = clicks.map((entry) => entry.hoverDistance);
-  const quickClicks = clicks.filter((entry) => entry.hoverDelay < 100).length;
-  const directClicks = clicks.filter((entry) => entry.hoverDelay < 120 && entry.hoverDistance < 16).length;
   const intervalMean = average(intervals);
   const intervalVariation = intervalMean > 0 ? standardDeviation(intervals) / intervalMean : 0;
-  const constantCadence = intervals.length >= 3 && intervalVariation < 0.08;
-  const organicCadence = clamp((intervalVariation - 0.14) / 0.25, 0, 1);
+  const delayMean = average(delays);
+  const delayVariation = delayMean > 0 ? standardDeviation(delays) / delayMean : 0;
+  const distanceMean = average(distances);
+  const organicCadence = clamp((intervalVariation - 0.1) / 0.18, 0, 1);
+  const organicDelay = clamp((delayVariation - 0.08) / 0.16, 0, 1);
+  const organicDistance = clamp((distanceMean - 10) / 35, 0, 1);
+  const fixedCadence = clamp((0.12 - intervalVariation) / 0.12, 0, 1);
+  const fixedDelay = clamp((0.12 - delayVariation) / 0.12, 0, 1);
 
   let adjustment = 0;
-  adjustment += Math.round(organicCadence * 14);
-  adjustment += Math.round(clamp((average(delays) - 120) / 70, 0, 4) * 3);
-  adjustment += Math.round(clamp(average(distances) / 60, 0, 2) * 2);
-  adjustment -= Math.round((1 - clamp(intervalVariation, 0, 1)) * 8);
-  adjustment -= quickClicks * 5;
-  adjustment -= directClicks * 4;
-  if (constantCadence && clicks.length >= 4) adjustment -= 28;
-  if (constantCadence && directClicks >= 2) adjustment -= 10;
-  if (organicCadence > 0.5 && clicks.length >= 4) adjustment += 4;
+  adjustment += Math.round(organicCadence * 18);
+  adjustment += Math.round(organicDelay * 10);
+  adjustment += Math.round(organicDistance * 6);
+  adjustment += Math.round(clamp((delayMean - 90) / 60, 0, 4) * 2);
+  adjustment += Math.round(clamp((distanceMean - 8) / 30, 0, 3) * 2);
+  adjustment -= Math.round(fixedCadence * 34);
+  adjustment -= Math.round(fixedDelay * 12);
 
-  if (average(delays) > 240) adjustment += 5;
+  if (intervals.length >= 5 && intervalVariation < 0.06) adjustment -= 18;
+  if (delayMean < 90 && delayVariation < 0.08 && clicks.length >= 5) adjustment -= 8;
+  if (organicCadence > 0.4 && organicDelay > 0.25 && clicks.length >= 4) adjustment += 6;
+  if (organicCadence > 0.55 && delayVariation > 0.12 && clicks.length >= 4) adjustment += 4;
+  if (organicDistance > 0.4 && clicks.length >= 4) adjustment += 2;
 
-  return clamp(adjustment, -60, 18);
+  if (delayMean > 240) adjustment += 5;
+
+  return clamp(adjustment, -45, 24);
 };
 
 const updateLabel = () => {
@@ -344,7 +372,7 @@ const recordKeydown = (event) => {
   const sample = { key: event.key, t: performance.now() };
 
   state.keydowns.push(sample);
-  state.keydowns = state.keydowns.filter((entry) => sample.t - entry.t <= TYPE_WINDOW_MS).slice(-TYPE_SAMPLE_LIMIT);
+  state.keydowns = state.keydowns.slice(-TYPE_SAMPLE_LIMIT);
   state.dirty.typing = true;
   state.labelDirty = true;
 
@@ -361,7 +389,7 @@ const recordKeyup = (event) => {
   const sample = { key: event.key, duration: Math.max(now - startedAt, 0), t: now };
 
   state.keyHolds.push(sample);
-  state.keyHolds = state.keyHolds.filter((entry) => sample.t - entry.t <= TYPE_WINDOW_MS).slice(-TYPE_SAMPLE_LIMIT);
+  state.keyHolds = state.keyHolds.slice(-TYPE_SAMPLE_LIMIT);
   state.activeKeys.delete(event.code);
   state.dirty.typing = true;
   state.labelDirty = true;
@@ -384,7 +412,7 @@ const recordClick = (event) => {
     : 0;
 
   state.clicks.push({ hoverDelay, hoverDistance, t: now });
-  state.clicks = state.clicks.filter((entry) => now - entry.t <= CLICK_WINDOW_MS).slice(-CLICK_SAMPLE_LIMIT);
+  state.clicks = state.clicks.slice(-CLICK_SAMPLE_LIMIT);
   state.dirty.click = true;
   state.labelDirty = true;
 };
